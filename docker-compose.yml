@@ -1,0 +1,73 @@
+
+version: '3'
+
+services:
+  pg-master:
+    build: .
+    restart: always
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - "5432:5432"
+    volumes:
+      - '/var/lib/postgresql/data:/var/lib/postgresql/data'
+    environment:
+      - POSTGRES_USER=postgres
+      - ROLE=Master
+      - ARBITER_HOST=pg-arbiter
+      - SLAVE_HOST=pg-slave
+      - POSTGRES_DB=postgres
+      - POSTGRES_PASSWORD=postgres
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    depends_on:
+      - pg-arbiter
+    networks:
+      - pg-network
+
+  pg-slave:
+    build: .
+    restart: always
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - '/var/lib/postgresql/data:/var/lib/postgresql/data'
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - ROLE=Slave
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+      - PGDATA=/var/lib/postgresql/data/pgdata
+      - ARBITER_HOST=pg-arbiter
+      - MASTER_HOST=pg-master
+      - REPLICATE_FROM=pg-master
+    depends_on:
+      - pg-arbiter
+    networks:
+      - pg-network
+    
+  pg-arbiter:
+    build: ./arbiter
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - ROLE=Arbiter
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+      - MASTER_HOST=pg-master
+      - SLAVE_HOST=pg-slave
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8000"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    volumes:
+      - './agent.py:/app/agent.py'
+    networks:
+      - pg-network
+
+networks:
+  pg-network:
